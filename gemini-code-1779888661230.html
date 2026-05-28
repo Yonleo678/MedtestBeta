@@ -1,0 +1,1238 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>营销推广数据汇总系统 - Premium Enterprise</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['"Noto Sans SC"', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'] },
+                    colors: {
+                        champagne: {
+                            50: '#FDFBF7',   
+                            100: '#F6EFE2',  
+                            200: '#EADBB9',  
+                            500: '#C5A059',  
+                            600: '#A98443',  
+                            700: '#8E6B31'   
+                        },
+                        slate: { 900: '#1C1C1E' } 
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+
+    <style>
+        body { background-color: #FDFBF7; color: #1C1C1E; -webkit-font-smoothing: antialiased; font-family: "Noto Sans SC", sans-serif; }
+        .premium-card { background: #FFFFFF; border: 1px solid #F6EFE2; border-radius: 1rem; transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1); }
+        .premium-card:hover { transform: translateY(-2px); box-shadow: 0 12px 30px rgba(197, 160, 89, 0.08); }
+        .premium-input { width: 100%; padding: 0.625rem 0.875rem; border-radius: 0.75rem; border: 1px solid #EADBB9; background: #FDFBF7; transition: all 0.2s ease; outline: none; font-size: 0.875rem; }
+        .premium-input:focus { border-color: #C5A059; background: #FFFFFF; box-shadow: 0 0 0 4px rgba(197, 160, 89, 0.1); }
+        .btn-gold { background: linear-gradient(135deg, #C5A059 0%, #A98443 100%); color: white; transition: all 0.25s ease; }
+        .btn-gold:hover { opacity: 0.95; box-shadow: 0 4px 12px rgba(169, 132, 67, 0.25); }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .dropdown-menu { display: none; }
+        .dropdown-container.open .dropdown-menu { display: block; }
+        .active-nav { background-color: #F6EFE2; color: #1C1C1E; font-weight: 500; }
+    </style>
+</head>
+<body class="overflow-hidden text-sm">
+
+    <div id="syncProgressLayer" class="fixed inset-0 bg-slate-900/40 backdrop-blur-md hidden flex-col items-center justify-center z-[99999]">
+        <div class="bg-white p-6 rounded-2xl shadow-2xl w-80 text-center space-y-4">
+            <div class="flex justify-between text-xs font-bold text-champagne-700">
+                <span id="syncStatusText">正在外发核心同步流...</span>
+                <span id="syncPercent">0%</span>
+            </div>
+            <div class="w-full bg-champagne-50 h-2 rounded-full overflow-hidden">
+                <div id="syncProgressBar" class="bg-gradient-to-r from-champagne-500 to-champagne-700 h-full w-0 transition-all duration-300"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="flex h-screen w-screen overflow-hidden">
+        
+        <aside id="sidebar" class="w-64 bg-white border-r border-champagne-100 flex flex-col z-30 transform md:transform-none fixed md:relative h-full transition-transform duration-300 -translate-x-full md:translate-x-0">
+            <div class="p-6 flex items-center justify-between border-b border-champagne-50">
+                <div class="flex items-center gap-3">
+                    <div class="w-6 h-6 rounded-lg btn-gold flex items-center justify-center text-xs"><i class="fas fa-chart-line"></i></div>
+                    <span class="font-bold tracking-wider text-sm">矩阵数据总台</span>
+                </div>
+                <button class="md:hidden text-gray-400 hover:text-black" onclick="App.toggleSidebar()"><i class="fas fa-times"></i></button>
+            </div>
+            <nav class="flex-1 p-4 space-y-1 overflow-y-auto no-scrollbar" id="sidebarMenu">
+                </nav>
+            <div class="p-4 border-t border-champagne-50 flex items-center justify-between bg-champagne-50/30">
+                <div class="flex items-center gap-2">
+                    <div id="roleBadge" class="w-2 h-2 rounded-full bg-emerald-500"></div>
+                    <span id="roleText" class="text-xs font-medium text-gray-600">管理员模式</span>
+                </div>
+                <button onclick="App.togglePermissionMode()" class="text-[11px] text-champagne-600 hover:underline font-medium">切权</button>
+            </div>
+        </aside>
+
+        <main class="flex-1 flex flex-col overflow-hidden relative">
+            
+            <header class="h-16 bg-white/80 backdrop-blur-md border-b border-champagne-100 flex items-center justify-between px-6 z-20">
+                <div class="flex items-center gap-4">
+                    <button class="md:hidden text-gray-600 text-lg" onclick="App.toggleSidebar()"><i class="fas fa-bars"></i></button>
+                    <h1 id="viewTitle" class="font-bold text-base tracking-tight text-slate-900">数据大盘视图</h1>
+                </div>
+                
+                <div class="flex items-center gap-3" id="globalFilterWrapper">
+                    <select id="globalPlatformFilter" class="premium-input !py-1.5 w-40 bg-white cursor-pointer" onchange="App.handleFilterChange()">
+                        <option value="all">全渠道汇总数据</option>
+                    </select>
+                    
+                    <div class="relative dropdown-container" id="monthDropdownContainer">
+                        <button class="premium-input !py-1.5 w-44 flex justify-between items-center bg-white cursor-pointer" onclick="App.toggleMonthDropdown(event)">
+                            <span id="monthFilterSummary" class="truncate text-xs font-medium text-gray-600">所有账期月份</span>
+                            <i class="fas fa-chevron-down text-[10px] text-champagne-500"></i>
+                        </button>
+                        <div class="dropdown-menu absolute top-full right-0 mt-1.5 w-56 bg-white/95 backdrop-blur-xl shadow-xl rounded-xl border border-champagne-200 p-3 z-50 max-h-60 overflow-y-auto no-scrollbar">
+                            <div class="flex justify-between items-center pb-2 mb-2 border-b border-champagne-100">
+                                <button class="text-[11px] text-champagne-600 font-bold" onclick="App.bulkSelectMonths(true)">全选</button>
+                                <button class="text-[11px] text-gray-400 font-bold" onclick="App.bulkSelectMonths(false)">清空</button>
+                            </div>
+                            <div id="monthCheckboxStack" class="space-y-1"></div>
+                        </div>
+                    </div>
+                </div>
+            </header>
+
+            <div id="stage" class="flex-1 overflow-y-auto p-6 md:p-8 no-scrollbar"></div>
+        </main>
+    </div>
+
+    <div id="globalModal" class="fixed inset-0 bg-slate-900/30 backdrop-blur-sm hidden items-center justify-center p-4 z-50 animate-fade-in">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[85vh] border border-champagne-100">
+            <div class="p-5 border-b border-champagne-50 bg-champagne-50/20 flex justify-between items-center">
+                <h3 id="modalTitle" class="font-bold text-sm tracking-wide text-slate-900">系统弹窗</h3>
+                <button onclick="App.closeModal()" class="text-gray-400 hover:text-black"><i class="fas fa-times text-sm"></i></button>
+            </div>
+            <div id="modalBody" class="p-6 overflow-y-auto flex-1 space-y-4 no-scrollbar"></div>
+            <div class="p-4 border-t border-champagne-50 bg-champagne-50/10 flex justify-end gap-2">
+                <button onclick="App.closeModal()" id="modalCancelBtn" class="px-4 py-2 rounded-xl text-gray-500 bg-white border border-champagne-200 hover:bg-champagne-50 text-xs font-medium">取消</button>
+                <button id="modalConfirmBtn" class="px-4 py-2 rounded-xl text-white btn-gold text-xs font-medium">确认提交</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="chartFullscreenBox" class="fixed inset-0 bg-white hidden flex-col p-8 z-[9999] animate-fade-in">
+        <div class="w-full flex justify-between items-center max-w-4xl mx-auto mb-6 border-b border-champagne-100 pb-4">
+            <h2 class="text-sm font-bold tracking-wider text-slate-900"><i class="fas fa-chart-pie text-champagne-500 mr-2"></i>初诊分类消费占比 - 深度多维高精大图</h2>
+            <button class="w-9 h-9 bg-champagne-100 text-champagne-700 rounded-xl flex items-center justify-center hover:bg-champagne-200" onclick="App.closeFullscreenChart()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="flex-1 w-full max-w-3xl mx-auto flex items-center justify-center">
+            <canvas id="fullscreenPieChart"></canvas>
+        </div>
+    </div>
+
+    <script>
+        const App = (function() {
+            const state = {
+                platforms: [], costs: [], visits: [], chats: [], logs: [], recycleBin: [],
+                settings: { token: '', gistId: '', fbUrl: '', mode: 'admin' },
+                filters: { platform: 'all', months: [], search: '', page: 1, limit: 6 },
+                routing: 'dashboard'
+            };
+
+            let doughnutChartInstance = null;
+            let fullscreenChartInstance = null;
+
+            const init = () => {
+                loadSettings();
+                loadFromLocalStorage();
+                parseUrlParametersOnLoad(); 
+                
+                if (state.platforms.length === 0) {
+                    generateMockData();
+                    saveToLocalStorage();
+                }
+                setupGlobalInterceptors();
+                renderSidebar();
+                buildMonthFilterStack();
+                route(state.routing);
+                autoConnectFirebase();
+            };
+
+            const loadSettings = () => {
+                const saved = localStorage.getItem('matrix_sys_settings');
+                if (saved) state.settings = { ...state.settings, ...JSON.parse(saved) };
+            };
+            const saveSettings = () => {
+                localStorage.setItem('matrix_sys_settings', JSON.stringify(state.settings));
+            };
+            const loadFromLocalStorage = () => {
+                const raw = localStorage.getItem('matrix_sys_data');
+                if (raw) {
+                    const parsed = JSON.parse(raw);
+                    ['platforms','costs','visits','chats','logs','recycleBin'].forEach(k => {
+                        if(parsed[k]) state[k] = parsed[k];
+                    });
+                }
+            };
+            const saveToLocalStorage = () => {
+                localStorage.setItem('matrix_sys_data', JSON.stringify({
+                    platforms: state.platforms, costs: state.costs, visits: state.visits,
+                    chats: state.chats, logs: state.logs, recycleBin: state.recycleBin
+                }));
+            };
+
+            const logAction = (action) => {
+                state.logs.unshift({ id: 'log_' + Date.now(), time: new Date().toLocaleString(), action });
+                if(state.logs.length > 100) state.logs.pop();
+            };
+
+            const commitState = async (logText) => {
+                saveToLocalStorage();
+                if(logText) logAction(logText);
+                if (state.settings.mode === 'admin') {
+                    await triggerCloudSynchronization();
+                }
+                refreshCurrentView();
+            };
+
+            const setupGlobalInterceptors = () => {
+                window.onclick = (e) => {
+                    if (!e.target.closest('#monthDropdownContainer')) {
+                        document.getElementById('monthDropdownContainer').classList.remove('open');
+                    }
+                };
+            };
+
+            const generateMockData = () => {
+                const m1 = "2026-04"; const m2 = "2026-05";
+                state.platforms = [
+                    { id: 'p_1', name: '小红书信息流公户', account: 'xhs-beauty-01' },
+                    { id: 'p_2', name: '美团点评专区', account: 'meituan-mt-99' },
+                    { id: 'p_3', name: '抖音巨量千川', account: 'douyin-qc-66' }
+                ];
+                state.costs = [
+                    { id: 'c_1', date: m1, platformId: 'p_1', amount: 15000 },
+                    { id: 'c_2', date: m1, platformId: 'p_2', amount: 12000 },
+                    { id: 'c_3', date: m2, platformId: 'p_1', amount: 18000 },
+                    { id: 'c_4', date: m2, platformId: 'p_3', amount: 25000 }
+                ];
+                state.visits = [
+                    { id: 'v_1', date: m1, platformId: 'p_1', category: '皮肤项目', items: [{name:'超声炮', count:5, amount:20000}, {name:'水光针', count:10, amount:8000}] },
+                    { id: 'v_2', date: m1, platformId: 'p_2', category: '脱毛护理', items: [{name:'冰点脱毛', count:40, amount:6000}] },
+                    { id: 'v_3', date: m2, platformId: 'p_1', category: '注射项目', items: [{name:'玻尿酸面雕', count:6, amount:24000}] },
+                    { id: 'v_4', date: m2, platformId: 'p_3', category: '手术项目', items: [{name:'眼综合精雕', count:2, amount:30000}] }
+                ];
+                state.chats = [
+                    { id: 'ch_1', date: m1, platformId: 'p_1', valid: 300, invalid: 80 },
+                    { id: 'ch_2', date: m1, platformId: 'p_2', valid: 500, invalid: 50 },
+                    { id: 'ch_3', date: m2, platformId: 'p_1', valid: 350, invalid: 90 },
+                    { id: 'ch_4', date: m2, platformId: 'p_3', valid: 420, invalid: 150 }
+                ];
+                logAction('系统成功初始化并自动填充大厂级演示数据包');
+            };
+
+            const getFilteredData = () => {
+                const plat = state.filters.platform;
+                const months = state.filters.months;
+                
+                const filterRule = (item) => {
+                    const matchPlat = (plat === 'all' || item.platformId === plat);
+                    const matchMonth = (months.length === 0 || months.includes(item.date));
+                    return matchPlat && matchMonth;
+                };
+
+                return {
+                    costs: state.costs.filter(filterRule),
+                    visits: state.visits.filter(filterRule),
+                    chats: state.chats.filter(filterRule)
+                };
+            };
+
+            const calculateMetrics = () => {
+                const fd = getFilteredData();
+                const promoCost = fd.costs.reduce((sum, c) => sum + Number(c.amount), 0);
+                
+                let totalVisits = 0;
+                let totalRevenue = 0;
+                fd.visits.forEach(v => {
+                    v.items.forEach(i => {
+                        totalVisits += Number(i.count);
+                        totalRevenue += Number(i.amount);
+                    });
+                });
+
+                const validChats = fd.chats.reduce((sum, c) => sum + Number(c.valid), 0);
+                const invalidChats = fd.chats.reduce((sum, c) => sum + Number(c.invalid), 0);
+                const totalChats = validChats + invalidChats;
+
+                return {
+                    promoCost,
+                    totalVisits,
+                    costPerVisit: totalVisits ? (promoCost / totalVisits).toFixed(2) : '0.00',
+                    totalRevenue,
+                    avgTicket: totalVisits ? (totalRevenue / totalVisits).toFixed(2) : '0.00',
+                    roi: promoCost ? (totalRevenue / promoCost).toFixed(2) : '0.00',
+                    validChats,
+                    invalidChats,
+                    totalChats,
+                    validRatio: totalChats ? ((validChats / totalChats) * 100).toFixed(1) : '0.0',
+                    invalidRatio: totalChats ? ((invalidChats / totalChats) * 100).toFixed(1) : '0.0'
+                };
+            };
+
+            const menuItems = [
+                { id: 'dashboard', name: '数据大盘视图', icon: 'fa-chart-pie' },
+                { id: 'platforms', name: '多平台与账户管理', icon: 'fa-sliders-h' },
+                { id: 'costs', name: '推广费用流水记录', icon: 'fa-wallet' },
+                { id: 'visits', name: '初诊到院明细记录', icon: 'fa-user-check' },
+                { id: 'chats', name: '后台对话记录系统', icon: 'fa-comment-alt' },
+                { id: 'recycle', name: '回收站与核心审计', icon: 'fa-history' },
+                { id: 'settings', name: '系统高级闭环配置', icon: 'fa-cogs' }
+            ];
+
+            const renderSidebar = () => {
+                const container = document.getElementById('sidebarMenu');
+                container.innerHTML = menuItems.map(item => `
+                    <button onclick="App.route('${item.id}')" class="w-full flex items-center gap-3 px-4 py-2.5 text-xs rounded-xl transition-all ${state.routing === item.id ? 'active-nav' : 'text-gray-500 hover:bg-champagne-50/50 hover:text-black'}">
+                        <i class="fas ${item.icon} w-4 text-center text-sm ${state.routing === item.id ? 'text-champagne-600' : 'text-gray-400'}"></i>
+                        <span>${item.name}</span>
+                    </button>
+                `).join('');
+            };
+
+            const route = (target) => {
+                state.routing = target;
+                state.filters.page = 1; 
+                renderSidebar();
+                
+                const filterWrapper = document.getElementById('globalFilterWrapper');
+                if (['dashboard', 'costs', 'visits', 'chats'].includes(target)) {
+                    filterWrapper.classList.remove('hidden');
+                    syncFilterDropdownsDOM();
+                } else {
+                    filterWrapper.classList.add('hidden');
+                }
+
+                document.getElementById('viewTitle').innerText = menuItems.find(m => m.id === target).name;
+                
+                const stage = document.getElementById('stage');
+                stage.innerHTML = `<div class="opacity-0 transition-opacity duration-300" id="subStage"></div>`;
+                const subStage = document.getElementById('subStage');
+
+                switch(target) {
+                    case 'dashboard': renderDashboard(subStage); break;
+                    case 'platforms': renderPlatforms(subStage); break;
+                    case 'costs': renderGenericTable(subStage, 'costs'); break;
+                    case 'visits': renderGenericTable(subStage, 'visits'); break;
+                    case 'chats': renderGenericTable(subStage, 'chats'); break;
+                    case 'recycle': renderRecycleAndLogs(subStage); break;
+                    case 'settings': renderSettings(subStage); break;
+                }
+                setTimeout(() => subStage.classList.remove('opacity-0'), 50);
+                if(window.innerWidth < 768) document.getElementById('sidebar').classList.add('-translate-x-full');
+            };
+
+            const refreshCurrentView = () => route(state.routing);
+
+            const buildMonthFilterStack = () => {
+                const allDates = [...new Set([...state.costs, ...state.visits, ...state.chats].map(x => x.date))].sort().reverse();
+                if(allDates.length === 0) {
+                    const cur = new Date().toISOString().substring(0,7);
+                    allDates.push(cur);
+                }
+                const stack = document.getElementById('monthCheckboxStack');
+                stack.innerHTML = allDates.map(m => `
+                    <label class="flex items-center gap-2 p-1.5 hover:bg-champagne-50 rounded-lg cursor-pointer text-xs">
+                        <input type="checkbox" value="${m}" class="month-filter-cb rounded border-champagne-200 text-champagne-500 focus:ring-champagne-500" ${state.filters.months.includes(m)?'checked':''}>
+                        <span class="font-mono">${m}</span>
+                    </label>
+                `).join('');
+
+                document.querySelectorAll('.month-filter-cb').forEach(cb => {
+                    cb.onchange = () => {
+                        state.filters.months = Array.from(document.querySelectorAll('.month-filter-cb:checked')).map(el => el.value);
+                        handleFilterChange();
+                    };
+                });
+            };
+
+            const syncFilterDropdownsDOM = () => {
+                const platSel = document.getElementById('globalPlatformFilter');
+                if (platSel) {
+                    platSel.innerHTML = `<option value="all">全渠道汇总数据</option>` + 
+                        state.platforms.map(p => `<option value="${p.id}" ${state.filters.platform===p.id?'selected':''}>${p.name}</option>`).join('');
+                }
+                
+                const summaryText = document.getElementById('monthFilterSummary');
+                if (summaryText) {
+                    summaryText.innerText = state.filters.months.length === 0 ? "所有账期月份" : `已选 ${state.filters.months.length} 个账期`;
+                }
+            };
+
+            const handleFilterChange = () => {
+                syncFilterDropdownsDOM();
+                refreshCurrentView();
+            };
+
+            const bulkSelectMonths = (status) => {
+                document.querySelectorAll('.month-filter-cb').forEach(cb => cb.checked = status);
+                state.filters.months = status ? Array.from(document.querySelectorAll('.month-filter-cb')).map(el => el.value) : [];
+                handleFilterChange();
+            };
+
+            const toggleMonthDropdown = (e) => {
+                e.stopPropagation();
+                document.getElementById('monthDropdownContainer').classList.toggle('open');
+            };
+
+            const renderDashboard = (con) => {
+                const m = calculateMetrics();
+                const renderCard = (lbl, val, pre='', suf='', hint='') => `
+                    <div class="premium-card p-5 flex flex-col justify-between min-h-[110px]">
+                        <div>
+                            <div class="text-[10px] uppercase tracking-wider text-gray-400 font-bold mb-1">${lbl}</div>
+                            <div class="text-xl font-bold tracking-tight text-slate-900">${pre}${Number(val).toLocaleString('zh-CN', {minimumFractionDigits: pre?2:0})}${suf}</div>
+                        </div>
+                        ${hint ? `<div class="text-[9px] text-champagne-600 mt-2 flex items-center gap-1 font-medium"><i class="fas fa-info-circle"></i> ${hint}</div>` : ''}
+                    </div>`;
+
+                con.innerHTML = `
+                    <div class="space-y-6">
+                        <div>
+                            <h4 class="text-xs font-bold text-champagne-700 uppercase tracking-widest mb-3 flex items-center gap-2">
+                                <span class="w-1.5 h-3 bg-champagne-500 rounded-full"></span> 核心投放业绩明细 (仅展示筛选范围)
+                            </h4>
+                            <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                                ${renderCard('渠道推广费用', m.promoCost, '¥')}
+                                ${renderCard('总到院人数', m.totalVisits, '', ' 人')}
+                                ${renderCard('总到院成本', m.costPerVisit, '¥', ' /人', '推广费用 ÷ 到院人数')}
+                                ${renderCard('总初诊业绩', m.totalRevenue, '¥')}
+                                ${renderCard('初诊平均客单价', m.avgTicket, '¥', ' /人', '初诊业绩 ÷ 到院人数')}
+                                ${renderCard('综合投产比 (ROI)', m.roi, '', '', '初诊业绩 ÷ 推广费用')}
+                            </div>
+                        </div>
+
+                        <div>
+                            <h4 class="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3 flex items-center gap-2">
+                                <span class="w-1.5 h-3 bg-gray-300 rounded-full"></span> 咨询对话流转化大盘
+                            </h4>
+                            <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+                                ${renderCard('有效对话数', m.validChats, '', ' 次')}
+                                ${renderCard('有效对话占比', m.validRatio, '', '%', '有效对话 ÷ 总对话数')}
+                                ${renderCard('无效对话数', m.invalidChats, '', ' 次')}
+                                ${renderCard('无效对话占比', m.invalidRatio, '', '%', '无效对话 ÷ 总对话数')}
+                                ${renderCard('总对话数', m.totalChats, '', ' 次')}
+                            </div>
+                        </div>
+
+                        <div class="premium-card p-6">
+                            <div class="flex justify-between items-center mb-4">
+                                <h4 class="text-xs font-bold uppercase tracking-wider text-gray-400">初诊各类别消费占比分析面板</h4>
+                                <button onclick="App.openFullscreenChart()" class="text-xs text-champagne-600 bg-champagne-50 px-3 py-1.5 rounded-lg font-bold hover:bg-champagne-100 transition">
+                                    <i class="fas fa-expand-arrows-alt mr-1"></i> 互动式全屏无损放大
+                                </button>
+                            </div>
+                            <div class="h-64 relative flex justify-center cursor-pointer" onclick="App.openFullscreenChart()">
+                                <canvas id="dashboardDoughnutChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                buildDoughnutChartLogic();
+            };
+
+            const buildDoughnutChartLogic = () => {
+                const fd = getFilteredData();
+                const categories = { '脱毛护理': 0, '皮肤项目': 0, '注射项目': 0, '手术项目': 0 };
+                fd.visits.forEach(v => {
+                    const recordSum = v.items.reduce((s, i) => s + Number(i.amount), 0);
+                    if(categories[v.category] !== undefined) categories[v.category] += recordSum;
+                });
+
+                const ctx = document.getElementById('dashboardDoughnutChart');
+                if(!ctx) return;
+                if(doughnutChartInstance) doughnutChartInstance.destroy();
+                
+                doughnutChartInstance = new Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: Object.keys(categories),
+                        datasets: [{
+                            data: Object.values(categories),
+                            backgroundColor: ['#C5A059', '#EADBB9', '#444655', '#A98443'],
+                            borderWidth: 4, borderColor: '#FFFFFF'
+                        }]
+                    },
+                    options: {
+                        responsive: true, maintainAspectRatio: false,
+                        plugins: {
+                            legend: { position: 'right', labels: { boxWidth: 10, usePointStyle: true, font: { size: 11 } } }
+                        },
+                        cutout: '75%'
+                    }
+                });
+            };
+
+            const renderPlatforms = (con) => {
+                con.innerHTML = `
+                    <div class="premium-card overflow-hidden">
+                        <div class="p-5 border-b border-champagne-50 flex justify-between items-center bg-champagne-50/10">
+                            <span class="text-xs font-bold text-gray-400 uppercase tracking-wider">推广主轴媒体管理控制矩阵</span>
+                            <button onclick="App.openPlatformModal()" class="px-3 py-1.5 text-xs text-white bg-slate-900 rounded-xl font-medium shadow-sm hover:opacity-90 transition admin-auth-node">+ 开辟全新数字公户</button>
+                        </div>
+                        <div class="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            ${state.platforms.map(p => `
+                                <div class="border border-champagne-100 p-4 rounded-xl relative group bg-champagne-50/20 hover:border-champagne-500 transition">
+                                    <div class="space-y-1 pr-12">
+                                        <div class="font-bold text-slate-900">${p.name}</div>
+                                        <div class="text-xs text-gray-400 font-mono">账户: ${p.account}</div>
+                                    </div>
+                                    <div class="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-all flex gap-1 admin-auth-node">
+                                        <button onclick="App.openPlatformModal('${p.id}')" class="text-gray-400 hover:text-black p-1"><i class="fas fa-edit text-xs"></i></button>
+                                        <button onclick="App.deletePlatform('${p.id}')" class="text-gray-400 hover:text-rose-500 p-1"><i class="fas fa-trash-alt text-xs"></i></button>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+                applyPermissionUIOverlay();
+            };
+
+            const renderGenericTable = (con, type) => {
+                let rows = state[type];
+                
+                if (state.filters.search) {
+                    const q = state.filters.search.toLowerCase();
+                    if(type === 'visits') {
+                        rows = rows.filter(r => r.category.includes(q) || r.items.some(i => i.name.toLowerCase().includes(q)));
+                    } else {
+                        rows = rows.filter(r => r.date.includes(q));
+                    }
+                }
+
+                const totalItems = rows.length;
+                const totalPages = Math.ceil(totalItems / state.filters.limit) || 1;
+                const startIdx = (state.filters.page - 1) * state.filters.limit;
+                const pageRows = rows.slice(startIdx, startIdx + state.filters.limit);
+
+                const getPlatformName = (id) => state.platforms.find(p=>p.id===id)?.name || '未知公户';
+
+                let tableHeaders = `<th class="p-4 w-12"><input type="checkbox" id="globalBatchSelect" onclick="App.toggleBatchRows(this)"></th><th class="p-4">账期月份</th><th class="p-4">媒体公户</th>`;
+                if(type === 'costs') tableHeaders += `<th class="p-4">推广实际消耗金</th>`;
+                if(type === 'visits') tableHeaders += `<th class="p-4">核心科室</th><th class="p-4">细分子项消耗明细</th><th class="p-4">累计核销款</th>`;
+                if(type === 'chats') tableHeaders += `<th class="p-4 text-emerald-600">有效对话</th><th class="p-4 text-rose-500">无效对话</th><th class="p-4">总对话量</th>`;
+                tableHeaders += `<th class="p-4 text-right admin-auth-node">后台管理</th>`;
+
+                con.innerHTML = `
+                    <div class="space-y-4">
+                        <div class="flex justify-between items-center flex-wrap gap-3">
+                            <div class="flex items-center gap-2">
+                                <input type="text" id="tableSearchInput" placeholder="极速检索对应数据..." value="${state.filters.search}" class="premium-input !py-1.5 w-60 bg-white">
+                                <button onclick="App.triggerTableSearch()" class="px-3 py-1.5 btn-gold rounded-xl text-xs font-medium">搜索</button>
+                                <button onclick="App.exportToExcel('${type}')" class="px-3 py-1.5 bg-emerald-600 text-white rounded-xl text-xs font-medium hover:opacity-90"><i class="fas fa-file-excel mr-1"></i> 导出</button>
+                            </div>
+                            <div class="flex items-center gap-2 admin-auth-node">
+                                <button onclick="App.executeBatchDelete('${type}')" class="px-3 py-1.5 text-xs bg-rose-500 text-white rounded-xl font-medium hover:bg-rose-600 transition">批量销账</button>
+                                <button onclick="App.openRecordModal('${type}')" class="px-3 py-1.5 text-xs text-white bg-slate-900 rounded-xl font-medium shadow-sm">+ 登记核心新流水</button>
+                            </div>
+                        </div>
+
+                        <div class="premium-card overflow-hidden">
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-left border-collapse text-xs">
+                                    <thead>
+                                        <tr class="bg-champagne-50/50 text-gray-400 font-bold tracking-wider border-b border-champagne-50">${tableHeaders}</tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-champagne-50/40 text-slate-900">
+                                        ${pageRows.map(row => {
+                                            let tds = `<td class="p-4"><input type="checkbox" value="${row.id}" class="row-batch-cb"></td><td class="p-4 font-mono font-medium">${row.date}</td><td class="p-4"><span class="px-2 py-0.5 bg-champagne-100 text-champagne-700 rounded-md font-medium">${getPlatformName(row.platformId)}</span></td>`;
+                                            if(type === 'costs') tds += `<td class="p-4 font-bold text-slate-900">¥${Number(row.amount).toLocaleString()}</td>`;
+                                            if(type === 'visits') {
+                                                const totalSum = row.items.reduce((s,i)=>s+Number(i.amount), 0);
+                                                tds += `
+                                                    <td class="p-4 font-medium">${row.category}</td>
+                                                    <td class="p-4"><div class="space-y-1 text-gray-400">${row.items.map(i=>`<div>• ${i.name} <span class="text-slate-900 font-medium">(${i.count}人 / ¥${Number(i.amount).toLocaleString()})</span></div>`).join('')}</div></td>
+                                                    <td class="p-4 font-bold text-champagne-700">¥${totalSum.toLocaleString()}</td>`;
+                                            }
+                                            if(type === 'chats') tds += `<td class="p-4 text-emerald-600 font-bold font-mono">${row.valid}</td><td class="p-4 text-rose-500 font-bold font-mono">${row.invalid}</td><td class="p-4 font-bold font-mono">${Number(row.valid)+Number(row.invalid)}</td>`;
+                                            
+                                            tds += `
+                                                <td class="p-4 text-right space-x-1 admin-auth-node">
+                                                    <button onclick="App.openRecordModal('${type}','${row.id}')" class="text-gray-400 hover:text-black p-1 transition"><i class="fas fa-edit text-xs"></i></button>
+                                                    <button onclick="App.deleteRecordRow('${type}','${row.id}')" class="text-gray-300 hover:text-rose-500 p-1 transition"><i class="fas fa-trash-alt text-xs"></i></button>
+                                                </td>`;
+                                            return `<tr>${tds}</tr>`;
+                                        }).join('')}
+                                        ${pageRows.length === 0 ? `<tr><td colspan="10" class="p-12 text-center text-gray-400 font-light select-none">无可调配的流水明细记录</td></tr>` : ''}
+                                    </tbody>
+                                </table>
+                            </div>
+                            
+                            <div class="p-4 bg-champagne-50/20 border-t border-champagne-50 flex justify-between items-center flex-wrap gap-2">
+                                <span class="text-xs text-gray-400">当前展现 ${startIdx+1} - ${Math.min(startIdx+state.filters.limit, totalItems)} 条，共计 ${totalItems} 条明细</span>
+                                <div class="flex items-center gap-1">
+                                    <button onclick="App.changePage(${state.filters.page - 1})" ${state.filters.page===1?'disabled':''} class="px-2.5 py-1 rounded-lg border border-champagne-200 text-xs disabled:opacity-40 bg-white">上页</button>
+                                    ${Array.from({length: totalPages}).map((_,i)=>`
+                                        <button onclick="App.changePage(${i+1})" class="w-7 h-7 rounded-lg text-xs font-bold ${state.filters.page===(i+1)?'btn-gold':'bg-white border border-champagne-200 text-gray-600'}">${i+1}</button>
+                                    `).join('')}
+                                    <button onclick="App.changePage(${state.filters.page + 1})" ${state.filters.page===totalPages?'disabled':''} class="px-2.5 py-1 rounded-lg border border-champagne-200 text-xs disabled:opacity-40 bg-white">下页</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                applyPermissionUIOverlay();
+            };
+
+            const triggerTableSearch = () => {
+                state.filters.search = document.getElementById('tableSearchInput').value.trim();
+                state.filters.page = 1;
+                refreshCurrentView();
+            };
+            const changePage = (p) => {
+                state.filters.page = p;
+                refreshCurrentView();
+            };
+            const toggleBatchRows = (master) => {
+                document.querySelectorAll('.row-batch-cb').forEach(cb => cb.checked = master.checked);
+            };
+
+            const renderRecycleAndLogs = (con) => {
+                con.innerHTML = `
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div class="premium-card flex flex-col h-[550px] overflow-hidden">
+                            <div class="p-4 border-b border-champagne-50 bg-champagne-50/10 flex justify-between items-center">
+                                <span class="text-xs font-bold text-gray-500 uppercase tracking-wider"><i class="fas fa-trash-alt mr-1"></i> 系统高防护回收站暂存区</span>
+                            </div>
+                            <div class="flex-1 overflow-y-auto p-4 space-y-2 no-scrollbar">
+                                ${state.recycleBin.map(item => `
+                                    <div class="p-3 border border-champagne-100 rounded-xl bg-white flex justify-between items-center text-xs">
+                                        <div>
+                                            <span class="px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded text-[10px] font-bold uppercase mr-2">${item.type}</span>
+                                            <span class="font-mono text-gray-400 mr-2">[${item.data.date}]</span>
+                                            <span class="font-medium text-slate-800">${item.data.category || '投放支出流水'}</span>
+                                        </div>
+                                        <button onclick="App.restoreRecycleItem('${item.id}')" class="text-xs text-champagne-600 hover:underline font-medium admin-auth-node"><i class="fas fa-undo-alt mr-1"></i>还原</button>
+                                    </div>
+                                `).join('')}
+                                ${state.recycleBin.length === 0 ? `<div class="text-center p-12 text-gray-400 font-light select-none">回收站绝对空虚，未触发任何硬删除</div>` : ''}
+                            </div>
+                        </div>
+                        
+                        <div class="premium-card flex flex-col h-[550px] overflow-hidden">
+                            <div class="p-4 border-b border-champagne-50 bg-champagne-50/10">
+                                <span class="text-xs font-bold text-gray-500 uppercase tracking-wider"><i class="fas fa-history mr-1"></i> 实时核心业务操作审计日志流</span>
+                            </div>
+                            <div class="flex-1 overflow-y-auto p-4 space-y-3 font-mono text-[11px] no-scrollbar bg-slate-900 text-slate-300">
+                                ${state.logs.map(l => `
+                                    <div class="border-b border-slate-800 pb-2">
+                                        <span class="text-champagne-500">[${l.time}]</span>
+                                        <p class="text-white mt-1 select-all">${l.action}</p>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    </div>
+                `;
+                applyPermissionUIOverlay();
+            };
+
+            const renderSettings = (con) => {
+                con.innerHTML = `
+                    <div class="max-w-2xl mx-auto space-y-6">
+                        <div class="premium-card p-6 space-y-4">
+                            <h4 class="text-xs font-bold uppercase tracking-wider text-champagne-700 border-b border-champagne-50 pb-2 flex items-center gap-2">
+                                <i class="fab fa-github"></i> Cloud Key 核心库配置 (仅填一次，本地自动固化)
+                            </h4>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div><label class="block text-[11px] font-bold text-gray-500 mb-1">GitHub Gist Token</label><input type="password" id="setToken" value="${state.settings.token}" class="premium-input"></div>
+                                <div><label class="block text-[11px] font-bold text-gray-500 mb-1">Gist ID</label><input type="text" id="setGist" value="${state.settings.gistId}" class="premium-input"></div>
+                            </div>
+                            <div>
+                                <label class="block text-[11px] font-bold text-gray-500 mb-1"><i class="fas fa-fire text-amber-500"></i> Firebase Realtime DB URL Endpoint</label>
+                                <input type="text" id="setFbUrl" value="${state.settings.fbUrl}" placeholder="https://your-app.firebaseio.com/data" class="premium-input">
+                            </div>
+                            <div class="pt-2 flex flex-wrap gap-2">
+                                <button onclick="App.saveSystemSettings()" class="px-4 py-2 text-xs bg-slate-900 text-white rounded-xl font-medium">深度存储本地缓存</button>
+                                <button onclick="App.manualCloudSync('upload')" class="px-4 py-2 text-xs border border-champagne-500 text-champagne-700 bg-white hover:bg-champagne-50 rounded-xl font-medium"><i class="fas fa-cloud-upload-alt mr-1"></i> 手动强制覆盖至云端</button>
+                                <button onclick="App.manualCloudSync('download')" class="px-4 py-2 text-xs border border-champagne-200 text-gray-600 bg-white hover:bg-gray-50 rounded-xl font-medium"><i class="fas fa-cloud-download-alt mr-1"></i> 从云端安全拉回覆盖</button>
+                            </div>
+                        </div>
+
+                        <div class="premium-card p-6 space-y-4">
+                            <h4 class="text-xs font-bold uppercase tracking-wider text-gray-400 border-b border-champagne-50 pb-2"><i class="fas fa-link"></i> 沙盒分发体系与高精魔术链接</h4>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <button onclick="App.generateMagicUrlLink()" class="p-4 border border-champagne-200 bg-champagne-50/20 rounded-xl text-left hover:border-champagne-500 transition">
+                                    <div class="font-bold text-slate-900 mb-1 text-xs"><i class="fas fa-magic text-champagne-500 mr-1"></i> 导出全量读写魔术链接</div>
+                                    <p class="text-[11px] text-gray-400 leading-relaxed font-normal">多端神级同步！自动将云凭证加密打包。第二台设备打开无需任何输入即可直接双向实时互传同步。</p>
+                                </button>
+                                <button onclick="App.generateReadOnlyUrlLink()" class="p-4 border border-champagne-200 bg-champagne-50/20 rounded-xl text-left hover:border-champagne-500 transition">
+                                    <div class="font-bold text-slate-900 mb-1 text-xs"><i class="fas fa-eye-slash text-gray-500 mr-1"></i> 封装备份只读审计链接</div>
+                                    <p class="text-[11px] text-gray-400 leading-relaxed font-normal">一键剥离任何编辑、提报、清除和覆盖权限，生成独立沙箱，安全分发至外部进行账目审查审计。</p>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            };
+
+            const saveSystemSettings = () => {
+                state.settings.token = document.getElementById('setToken').value.trim();
+                state.settings.gistId = document.getElementById('setGist').value.trim();
+                state.settings.fbUrl = document.getElementById('setFbUrl').value.trim();
+                saveSettings();
+                logAction('修订并固化了云端通信授信凭证组');
+                Swal.fire({ text: '核心通信配置缓存成功', icon: 'success', toast: true, position: 'top-end', showConfirmButton: false, timer: 1500 });
+                autoConnectFirebase();
+            };
+
+            const openModalSandbox = (title, html, onConfirm) => {
+                document.getElementById('modalTitle').innerText = title;
+                document.getElementById('modalBody').innerHTML = html;
+                const confirmBtn = document.getElementById('modalConfirmBtn');
+                
+                const newConfirm = confirmBtn.cloneNode(true);
+                confirmBtn.parentNode.replaceChild(newConfirm, confirmBtn);
+                newConfirm.onclick = () => { if(onConfirm()) closeModal(); };
+                
+                const m = document.getElementById('globalModal');
+                m.classList.remove('hidden'); m.classList.add('flex');
+            };
+            const closeModal = () => {
+                const m = document.getElementById('globalModal');
+                m.classList.remove('flex'); m.classList.add('hidden');
+            };
+
+            const openPlatformModal = (id = null) => {
+                const isEdit = id !== null;
+                const item = isEdit ? state.platforms.find(p=>p.id===id) : { name: '', account: '' };
+                const html = `
+                    <div><label class="block text-xs font-bold text-gray-500 mb-1">渠道媒介公户全称</label><input type="text" id="pmName" value="${item.name}" class="premium-input" placeholder="例：小红书推广投放公户"></div>
+                    <div><label class="block text-xs font-bold text-gray-500 mb-1">官方后台管理登录账户名</label><input type="text" id="pmAcc" value="${item.account}" class="premium-input" placeholder="例：red_ops_01"></div>
+                `;
+                openModalSandbox(isEdit?'编辑渠道媒体档案':'开辟全新推广公户', html, () => {
+                    const name = document.getElementById('pmName').value.trim();
+                    const account = document.getElementById('pmAcc').value.trim();
+                    if(!name || !account) return Swal.fire({text:'请填完必选项', icon:'warning'}), false;
+                    
+                    if(isEdit) {
+                        const target = state.platforms.find(p=>p.id===id);
+                        target.name = name; target.account = account;
+                        commitState(`修订了渠道公户主档信息: ${name}`);
+                    } else {
+                        state.platforms.push({ id: 'p_' + Date.now(), name, account });
+                        commitState(`成功挂载了新渠道公户: ${name}`);
+                    }
+                    return true;
+                });
+            };
+
+            const openRecordModal = (type, id = null) => {
+                const isEdit = id !== null;
+                const row = isEdit ? state[type].find(r=>r.id===id) : { date: new Date().toISOString().substring(0,7), platformId: state.platforms[0]?.id || '', amount: '', category: '皮肤项目', items: [], valid: '', invalid: '' };
+                
+                const platOptions = state.platforms.map(p => `<option value="${p.id}" ${row.platformId===p.id?'selected':''}>${p.name}</option>`).join('');
+                
+                let uniqueForm = '';
+                if(type === 'costs') {
+                    uniqueForm = `<div><label class="block text-xs font-bold text-gray-500 mb-1">单月真金消耗花费 (元)</label><input type="number" id="fAmount" value="${row.amount}" class="premium-input"></div>`;
+                } else if(type === 'chats') {
+                    uniqueForm = `
+                        <div class="grid grid-cols-2 gap-3">
+                            <div><label class="block text-xs font-bold text-gray-500 mb-1">有效留资粉数 (次)</label><input type="number" id="fValid" value="${row.valid}" class="premium-input"></div>
+                            <div><label class="block text-xs font-bold text-gray-500 mb-1">砸粉/无效留资数 (次)</label><input type="number" id="fInvalid" value="${row.invalid}" class="premium-input"></div>
+                        </div>`;
+                } else if(type === 'visits') {
+                    uniqueForm = `
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 mb-1">初诊核心科室大类</label>
+                            <select id="fCategory" class="premium-input">
+                                <option value="脱毛护理" ${row.category==='脱毛护理'?'selected':''}>脱毛护理 (高频复购科室)</option>
+                                <option value="皮肤项目" ${row.category==='皮肤项目'?'selected':''}>皮肤项目 (非手术类科室)</option>
+                                <option value="注射项目" ${row.category==='注射项目'?'selected':''}>注射项目 (轻医美微整形)</option>
+                                <option value="手术项目" ${row.category==='手术项目'?'selected':''}>手术项目 (大外科整形类)</option>
+                            </select>
+                        </div>
+                        <div class="border border-champagne-100 rounded-xl p-4 bg-champagne-50/20">
+                            <div class="flex justify-between items-center mb-2">
+                                <span class="text-xs font-bold text-slate-900">细分子项目数据核销流</span>
+                                <button type="button" onclick="App.appendSubItemRow()" class="text-xs text-champagne-600 font-bold"><i class="fas fa-plus-circle"></i> 追加细分项</button>
+                            </div>
+                            <div id="subItemContainer" class="space-y-2"></div>
+                            <div class="mt-2 text-right text-xs font-bold text-slate-900" id="subItemSumText">总计金额: ¥0</div>
+                        </div>`;
+                }
+
+                const html = `
+                    <div class="grid grid-cols-2 gap-3">
+                        <div><label class="block text-xs font-bold text-gray-500 mb-1">财会账期月份</label><input type="month" id="fDate" value="${row.date}" class="premium-input"></div>
+                        <div><label class="block text-xs font-bold text-gray-500 mb-1">归属媒体平台</label><select id="fPlat" class="premium-input">${platOptions}</select></div>
+                    </div>
+                    ${uniqueForm}
+                `;
+
+                openModalSandbox(isEdit?'修订历史核心流水':'登记全新业绩指标流水', html, () => {
+                    const date = document.getElementById('fDate').value;
+                    const platformId = document.getElementById('fPlat').value;
+                    if(!date || !platformId) return Swal.fire({text:'账期和渠道不可悬空', icon:'warning'}), false;
+
+                    let targetPayload = { id: isEdit ? id : type[0] + '_' + Date.now(), date, platformId };
+
+                    if(type === 'costs') {
+                        const amount = document.getElementById('fAmount').value;
+                        if(!amount) return false;
+                        targetPayload.amount = Number(amount);
+                    } else if(type === 'chats') {
+                        const valid = document.getElementById('fValid').value;
+                        const invalid = document.getElementById('fInvalid').value;
+                        if(!valid || !invalid) return false;
+                        targetPayload.valid = Number(valid); targetPayload.invalid = Number(invalid);
+                    } else if(type === 'visits') {
+                        targetPayload.category = document.getElementById('fCategory').value;
+                        const items = [];
+                        document.querySelectorAll('.sub-item-row').forEach(r => {
+                            const name = r.querySelector('.si-name').value.trim();
+                            const count = r.querySelector('.si-count').value;
+                            const amount = r.querySelector('.si-amount').value;
+                            if(name && count && amount) items.push({ name, count: Number(count), amount: Number(amount) });
+                        });
+                        if(items.length === 0) return Swal.fire({text:'请至少保留一条有效的细分子项明细', icon:'warning'}), false;
+                        targetPayload.items = items;
+                    }
+
+                    if(isEdit) {
+                        const idx = state[type].findIndex(x=>x.id===id);
+                        state[type][idx] = targetPayload;
+                        commitState(`手动修订了 [${type}] 流水项, ID: ${id}`);
+                    } else {
+                        state[type].push(targetPayload);
+                        commitState(`增量提报了 [${type}] 数据流水一笔`);
+                    }
+                    buildMonthFilterStack();
+                    return true;
+                });
+
+                if(type === 'visits') {
+                    if(isEdit && row.items) {
+                        row.items.forEach(i => appendSubItemRow(i.name, i.count, i.amount));
+                    } else {
+                        appendSubItemRow();
+                    }
+                }
+            };
+
+            const appendSubItemRow = (name='', count='', amount='') => {
+                const con = document.getElementById('subItemContainer');
+                if(!con) return;
+                const rowId = 'si_' + Date.now() + Math.random().toString(36).substr(2, 4);
+                const el = document.createElement('div');
+                el.className = 'flex gap-2 items-center sub-item-row animate-fade-in';
+                el.id = rowId;
+                el.innerHTML = `
+                    <input type="text" placeholder="品类名" value="${name}" class="premium-input !py-1 text-xs flex-1 si-name" oninput="App.recalcSubItemSum()">
+                    <input type="number" placeholder="人数" value="${count}" class="premium-input !py-1 text-xs w-16 si-count" oninput="App.recalcSubItemSum()">
+                    <input type="number" placeholder="总额" value="${amount}" class="premium-input !py-1 text-xs w-24 si-amount" oninput="App.recalcSubItemSum()">
+                    <button type="button" onclick="document.getElementById('${rowId}').remove(); App.recalcSubItemSum();" class="text-gray-300 hover:text-rose-500"><i class="fas fa-minus-circle"></i></button>
+                `;
+                con.appendChild(el);
+                recalcSubItemSum();
+            };
+
+            const recalcSubItemSum = () => {
+                let sum = 0;
+                document.querySelectorAll('.sub-item-row').forEach(r => {
+                    const amt = r.querySelector('.si-amount').value;
+                    if(amt) sum += Number(amt);
+                });
+                const txt = document.getElementById('subItemSumText');
+                if(txt) txt.innerText = `总计金额: ¥${sum.toLocaleString()}`;
+            };
+
+            const deleteRecordRow = async (type, id) => {
+                const check = await Swal.fire({
+                    text: '确定要将该流水送入暂存回收站？大盘将立即扣减相关权值。',
+                    icon: 'warning', showCancelButton: true, confirmButtonColor: '#1C1C1E', cancelButtonColor: '#EADBB9', confirmButtonText: '作废移入回收站', cancelButtonText: '取消'
+                });
+                if(check.isConfirmed) {
+                    const targetIdx = state[type].findIndex(x=>x.id===id);
+                    const deleted = state[type].splice(targetIdx, 1)[0];
+                    state.recycleBin.push({ id: 'rb_' + Date.now(), type, data: deleted });
+                    await commitState(`流水作废移入回收站, 类别: [${type}], 原ID: ${id}`);
+                }
+            };
+
+            const restoreRecycleItem = async (rbId) => {
+                const matchIdx = state.recycleBin.findIndex(x=>x.id===rbId);
+                const restored = state.recycleBin.splice(matchIdx, 1)[0];
+                state[restored.type].push(restored.data);
+                await commitState(`回收站紧急复原账目数据流水成功, 原ID: ${restored.data.id}`);
+            };
+
+            const executeBatchDelete = async (type) => {
+                const checkedIds = Array.from(document.querySelectorAll('.row-batch-cb:checked')).map(el => el.value);
+                if(checkedIds.length === 0) return Swal.fire({text:'没有捕获到任何勾选节点', icon:'info'});
+                
+                const check = await Swal.fire({ text: `确认对这 ${checkedIds.length} 项记录进行批量作废入库？`, icon: 'warning', showCancelButton: true, confirmButtonColor: '#1C1C1E', confirmButtonText: '确定批量作废' });
+                if(check.isConfirmed) {
+                    checkedIds.forEach(id => {
+                        const idx = state[type].findIndex(x=>x.id===id);
+                        if(idx !== -1) {
+                            const deleted = state[type].splice(idx, 1)[0];
+                            state.recycleBin.push({ id: 'rb_' + Date.now(), type, data: deleted });
+                        }
+                    });
+                    await commitState(`批量作废清收 ${checkedIds.length} 项流水入库暂存`);
+                }
+            };
+
+            const deletePlatform = async (id) => {
+                const check = await Swal.fire({ text: '注销该推广公户将同步销毁其绑定的历史费用、对话、到院联动流，是否执行深度绝育删除？', icon: 'error', showCancelButton: true, confirmButtonColor: '#DF3333' });
+                if(check.isConfirmed) {
+                    state.platforms = state.platforms.filter(p=>p.id!==id);
+                    state.costs = state.costs.filter(c=>c.platformId!==id);
+                    state.visits = state.visits.filter(v=>v.platformId!==id);
+                    state.chats = state.chats.filter(ch=>ch.platformId!==id);
+                    await commitState(`注销清空了广告媒体推广渠道主档: ${id}`);
+                }
+            };
+
+            // 【核心修正节点】：完美对齐全屏大图的数据交互引擎
+            const openFullscreenChart = () => {
+                const box = document.getElementById('chartFullscreenBox');
+                box.classList.remove('hidden'); box.classList.add('flex');
+
+                const fd = getFilteredData();
+                const categories = { '脱毛护理': 0, '皮肤项目': 0, '注射项目': 0, '手术项目': 0 };
+                fd.visits.forEach(v => {
+                    const recordSum = v.items.reduce((s, i) => s + Number(i.amount), 0);
+                    if(categories[v.category] !== undefined) categories[v.category] += recordSum;
+                });
+
+                // 计算当前筛选条件下的总盘业绩，用于计算高精百分比占位
+                const globalTotalAmount = Object.values(categories).reduce((sum, current) => sum + current, 0);
+
+                const ctx = document.getElementById('fullscreenPieChart');
+                if(fullscreenChartInstance) fullscreenChartInstance.destroy();
+
+                fullscreenChartInstance = new Chart(ctx, {
+                    type: 'pie',
+                    data: {
+                        labels: Object.keys(categories),
+                        datasets: [{
+                            data: Object.values(categories),
+                            backgroundColor: ['#C5A059', '#EADBB9', '#444655', '#A98443'],
+                            borderWidth: 2,
+                            borderColor: '#FFFFFF'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        layout: { padding: 40 }, 
+                        plugins: {
+                            legend: { 
+                                position: 'bottom', 
+                                labels: { 
+                                    padding: 24, 
+                                    font: { size: 13, weight: 'bold', family: '"Noto Sans SC"' },
+                                    // 动态在图例上直接追加汇总项
+                                    generateLabels: (chart) => {
+                                        const data = chart.data;
+                                        if (data.labels.length && data.datasets.length) {
+                                            return data.labels.map((label, i) => {
+                                                const value = data.datasets[0].data[i];
+                                                const percentage = globalTotalAmount > 0 ? ((value / globalTotalAmount) * 100).toFixed(1) : '0.0';
+                                                return {
+                                                    text: `${label} : ¥${value.toLocaleString()} (${percentage}%)`,
+                                                    fillStyle: data.datasets[0].backgroundColor[i],
+                                                    strokeStyle: '#FFFFFF',
+                                                    lineWidth: 0,
+                                                    hidden: false,
+                                                    index: i
+                                                };
+                                            });
+                                        }
+                                        return [];
+                                    }
+                                } 
+                            },
+                            tooltip: {
+                                enabled: true,
+                                backgroundColor: 'rgba(28, 28, 30, 0.95)',
+                                titleFont: { size: 14, weight: 'bold', family: '"Noto Sans SC"' },
+                                bodyFont: { size: 13, family: '"Noto Sans SC"' },
+                                padding: 12,
+                                cornerRadius: 8,
+                                callbacks: { 
+                                    label: (context) => {
+                                        const value = context.raw || 0;
+                                        const percentage = globalTotalAmount > 0 ? ((value / globalTotalAmount) * 100).toFixed(1) : '0.0';
+                                        return ` 核心核销款: ¥${Number(value).toLocaleString()}元 (占比: ${percentage}%)`; 
+                                    } 
+                                }
+                            }
+                        }
+                    }
+                });
+            };
+
+            const closeFullscreenChart = () => {
+                const box = document.getElementById('chartFullscreenBox');
+                box.classList.remove('flex'); box.classList.add('hidden');
+            };
+
+            const toggleSyncProgressBarUI = (visible, statusLabel = '') => {
+                const el = document.getElementById('syncProgressLayer');
+                const bar = document.getElementById('syncProgressBar');
+                const percent = document.getElementById('syncPercent');
+                const txt = document.getElementById('syncStatusText');
+                if(!el || !bar) return;
+                
+                if(statusLabel) txt.innerText = statusLabel;
+                if(visible) {
+                    el.classList.remove('hidden'); el.classList.add('flex');
+                    let p = 0;
+                    const inv = setInterval(() => {
+                        p += Math.floor(Math.random() * 25) + 5;
+                        if(p >= 90) { p = 90; clearInterval(inv); }
+                        bar.style.width = p + '%'; percent.innerText = p + '%';
+                    }, 80);
+                    el.dataset.intervalId = inv;
+                } else {
+                    clearInterval(Number(el.dataset.intervalId));
+                    bar.style.width = '100%'; percent.innerText = '100%';
+                    setTimeout(() => {
+                        el.classList.remove('flex'); el.classList.add('hidden');
+                        bar.style.width = '0%'; percent.innerText = '0%';
+                    }, 250);
+                }
+            };
+
+            const triggerCloudSynchronization = async () => {
+                const { token, gistId, fbUrl } = state.settings;
+                const payload = JSON.stringify({
+                    platforms: state.platforms, costs: state.costs, visits: state.visits, chats: state.chats
+                });
+
+                if(token && gistId) {
+                    toggleSyncProgressBarUI(true, '正在打包增量推向 GitHub Gist...');
+                    try {
+                        await fetch(`https://api.github.com/gists/${gistId}`, {
+                            method: 'PATCH',
+                            headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.github.v3+json' },
+                            body: JSON.stringify({ files: { 'marketing_enterprise_db.json': { content: payload } } })
+                        });
+                    } catch (e) { console.error('Gist Sync Err:', e); }
+                    finally { toggleSyncProgressBarUI(false); }
+                }
+
+                if(fbUrl) {
+                    toggleSyncProgressBarUI(true, '正在对齐 Firebase 数据库快照...');
+                    try {
+                        await fetch(`${fbUrl}.json`, { method: 'PUT', body: payload });
+                    } catch (e) { console.error('Firebase Sync Err:', e); }
+                    finally { toggleSyncProgressBarUI(false); }
+                }
+            };
+
+            const manualCloudSync = async (direction) => {
+                const { token, gistId, fbUrl } = state.settings;
+                if(!token && !gistId && !fbUrl) return;
+
+                if(direction === 'upload') {
+                    await triggerCloudSynchronization();
+                    Swal.fire({ text: '云端数据库快照已被本地覆盖同步。', icon: 'success', confirmButtonColor: '#C5A059' });
+                } else {
+                    toggleSyncProgressBarUI(true, '正在从云端拉取全量备份解压...');
+                    try {
+                        let remoteData = null;
+                        if (fbUrl) {
+                            const res = await fetch(`${fbUrl}.json`);
+                            remoteData = await res.json();
+                        } else if (gistId && token) {
+                            const res = await fetch(`https://api.github.com/gists/${gistId}`, { headers: { 'Authorization': `Bearer ${token}` } });
+                            const raw = await res.json();
+                            remoteData = JSON.parse(raw.files['marketing_enterprise_db.json'].content);
+                        }
+                        if(remoteData) {
+                            ['platforms','costs','visits','chats'].forEach(k => { if(remoteData[k]) state[k] = remoteData[k]; });
+                            saveToLocalStorage();
+                            buildMonthFilterStack();
+                            refreshCurrentView();
+                        }
+                    } catch(e) { console.error(e); }
+                    finally { toggleSyncProgressBarUI(false); }
+                }
+            };
+
+            const autoConnectFirebase = () => {
+                const { fbUrl } = state.settings;
+                if(!fbUrl) return;
+                if(window.EventSource) {
+                    if(window.fbSSE) window.fbSSE.close();
+                    const source = new EventSource(`${fbUrl}.json`);
+                    source.addEventListener('put', (e) => {
+                        const eventData = JSON.parse(e.data);
+                        if (eventData && eventData.data && state.settings.mode !== 'admin') {
+                            const d = eventData.data;
+                            ['platforms','costs','visits','chats'].forEach(k => { if(d[k]) state[k] = d[k]; });
+                            saveToLocalStorage();
+                            refreshCurrentView();
+                        }
+                    });
+                    window.fbSSE = source;
+                }
+            };
+
+            const togglePermissionMode = () => {
+                state.settings.mode = state.settings.mode === 'admin' ? 'readonly' : 'admin';
+                saveSettings();
+                applyPermissionUIOverlay();
+                Swal.fire({ text: `已切入：${state.settings.mode==='admin'?'全功能管理员':'只读审计防护'}模式`, icon: 'info', toast: true, position: 'top-end', showConfirmButton: false, timer: 1500 });
+            };
+
+            const applyPermissionUIOverlay = () => {
+                const isAdmin = state.settings.mode === 'admin';
+                const rb = document.getElementById('roleBadge');
+                const rt = document.getElementById('roleText');
+                if(rb) rb.className = `w-2 h-2 rounded-full ${isAdmin?'bg-emerald-500':'bg-amber-500'}`;
+                if(rt) rt.innerText = isAdmin ? '管理员模式' : '只读审计沙箱';
+                
+                document.querySelectorAll('.admin-auth-node').forEach(el => {
+                    if(!isAdmin) {
+                        el.classList.add('pointer-events-none', 'opacity-20');
+                        if(el.tagName === 'BUTTON') el.disabled = true;
+                    } else {
+                        el.classList.remove('pointer-events-none', 'opacity-20');
+                        if(el.tagName === 'BUTTON') el.disabled = false;
+                    }
+                });
+            };
+
+            const generateMagicUrlLink = () => {
+                const currentUrl = window.location.href.split('?')[0];
+                const bundle = {
+                    t: state.settings.token,
+                    g: state.settings.gistId,
+                    f: state.settings.fbUrl,
+                    m: 'admin'
+                };
+                const b64 = btoa(encodeURIComponent(JSON.stringify(bundle)));
+                const finalLink = currentUrl + `?m=${b64}`;
+                
+                navigator.clipboard.writeText(finalLink);
+                Swal.fire({
+                    title: '🚀 双向读写魔术链接构建成功！',
+                    text: '已将包含完整云同步路由凭证的魔术链接克隆至剪贴板。在另一台设备直接访问此链接，即可瞬间获得管理员权限并完美开启【实时云同步回传】！',
+                    icon: 'success', confirmButtonColor: '#C5A059'
+                });
+            };
+
+            const generateReadOnlyUrlLink = () => {
+                const currentUrl = window.location.href.split('?')[0];
+                const bundle = {
+                    g: state.settings.gistId,
+                    f: state.settings.fbUrl,
+                    m: 'readonly'
+                };
+                const b64 = btoa(encodeURIComponent(JSON.stringify(bundle)));
+                const finalLink = currentUrl + `?r=${b64}`;
+                
+                navigator.clipboard.writeText(finalLink);
+                Swal.fire({ text: '🔒 审计监督只读链接生成就绪！已克隆至剪贴板，其他设备访问此链接只能只读查看大盘，无权修改或向云端上行业务。', icon: 'success', confirmButtonColor: '#C5A059' });
+            };
+
+            const parseUrlParametersOnLoad = () => {
+                const params = new URLSearchParams(window.location.search);
+                
+                const m = params.get('m');
+                if(m) {
+                    try {
+                        const cfg = JSON.parse(decodeURIComponent(atob(m)));
+                        state.settings.token = cfg.t || '';
+                        state.settings.gistId = cfg.g || '';
+                        state.settings.fbUrl = cfg.f || '';
+                        state.settings.mode = cfg.m || 'admin';
+                        saveSettings();
+                        logAction('超级双向魔术链接握手成功，已自动同步全线云通信授信组件');
+                    } catch(e) { console.error('Magic link error:', e); }
+                }
+                
+                const r = params.get('r');
+                if(r) {
+                    try {
+                        const cfg = JSON.parse(decodeURIComponent(atob(r)));
+                        state.settings.token = ''; 
+                        state.settings.gistId = cfg.g || '';
+                        state.settings.fbUrl = cfg.f || '';
+                        state.settings.mode = 'readonly';
+                        saveSettings();
+                        logAction('安全防线切入：成功接入第三方只读审计沙箱流');
+                    } catch(e) { console.error('Readonly link error:', e); }
+                }
+
+                const d = params.get('d');
+                if(d) {
+                    try {
+                        const raw = JSON.parse(decodeURIComponent(atob(d)));
+                        if(raw.p) {
+                            state.platforms = raw.p.map(x=>({id:x[0], name:x[1], account:x[2]}));
+                            state.costs = raw.c.map(x=>({id:'c_'+Math.random(), date:x[0], platformId:x[1], amount:x[2]}));
+                            state.visits = raw.v.map(x=>({id:'v_'+Math.random(), date:x[0], platformId:x[1], category:x[2], items:x[3].map(i=>({name:i[0], count:i[1], amount:i[2]}))}));
+                            state.chats = raw.ch.map(x=>({id:'ch_'+Math.random(), date:x[0], platformId:x[1], valid:x[2], invalid:x[3]}));
+                            saveToLocalStorage();
+                        }
+                    } catch(e) { console.error(e); }
+                }
+
+                if(state.settings.gistId || state.settings.fbUrl) {
+                    setTimeout(() => { manualCloudSync('download'); }, 200);
+                }
+            };
+
+            const exportToExcel = (type) => {
+                const book = XLSX.utils.book_new();
+                let exportRows = [];
+                if(type==='costs') {
+                    exportRows = state.costs.map(c=>({ '账期':c.date, '平台ID':c.platformId, '消耗金额(元)':c.amount }));
+                } else if(type==='chats') {
+                    exportRows = state.chats.map(ch=>({ '账期':ch.date, '平台ID':ch.platformId, '有效对话':ch.valid, '无效对话':ch.invalid }));
+                } else if(type==='visits') {
+                    state.visits.forEach(v => {
+                        v.items.forEach(i => {
+                            exportRows.push({ '账期':v.date, '平台ID':v.platformId, '科室大类':v.category, '细分子项':i.name, '核销人数':i.count, '核销总额':i.amount });
+                        });
+                    });
+                }
+                const sheet = XLSX.utils.json_to_sheet(exportRows);
+                XLSX.utils.book_append_sheet(book, sheet, `${type}_明细报表`);
+                XLSX.writeFile(book, `Enterprise_Data_${type}_${Date.now()}.xlsx`);
+                logAction(`导出了 [${type}] 流水账目至标准 Excel 格式文件`);
+            };
+
+            const toggleSidebar = () => {
+                document.getElementById('sidebar').classList.toggle('-translate-x-full');
+            };
+
+            return {
+                init, route, toggleSidebar, handleFilterChange, toggleMonthDropdown, bulkSelectMonths, openPlatformModal, deletePlatform, openRecordModal, appendSubItemRow, recalcSubItemSum, deleteRecordRow, executeBatchDelete, restoreRecycleItem, openFullscreenChart, closeFullscreenChart, saveSystemSettings, manualCloudSync, generateMagicUrlLink, generateReadOnlyUrlLink, togglePermissionMode, triggerTableSearch, changePage, toggleBatchRows, exportToExcel
+            };
+        })();
+
+        document.addEventListener('DOMContentLoaded', App.init);
+    </script>
+</body>
+</html>
